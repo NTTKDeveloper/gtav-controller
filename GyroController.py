@@ -3,10 +3,6 @@ import time
 import pygetwindow as gw
 import pyautogui
 
-# # Thời gian chờ trước khi bắt đầu
-# print("Bắt đầu điều khiển chuột sau 3 giây...")
-# time.sleep(3)
-
 class GyroController():
     def __init__(self, name):
         self.name = name
@@ -36,3 +32,16 @@ class GyroController():
             (center_y - limit_y) <= new_y <= (center_y + limit_y)):
             return 1  # Di chuyển hợp lệ
         return 0  # Di chuyển vượt giới hạn
+    
+    #Giả lập bàn phím và nhớ tắt unikey
+    def press_key(seft, key, duration):
+        pydirectinput.keyDown(key) # Nhấn phím
+        time.sleep(duration)
+        pydirectinput.keyUp(key) # Nhả phím
+
+# # Thời gian chờ trước khi bắt đầu
+# print("Bắt đầu điều khiển chuột sau 3 giây...")
+# time.sleep(3)
+
+# gyroController = GyroController("Emulation")
+# gyroController.press_key('w', 5)
