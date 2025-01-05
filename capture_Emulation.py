@@ -1,6 +1,8 @@
 import cv2
 import time
 import numpy as np
+from GyroController import GyroController as GC
+import pre_processing
 
 def compute_depth_map(disparity_map, fov, baseline_cm, width_px):
     fov_rad = np.deg2rad(fov)
@@ -12,14 +14,37 @@ def compute_depth_map(disparity_map, fov, baseline_cm, width_px):
     depth_map[non_zero_disparity] = (f * baseline_m) / disparity_map[non_zero_disparity]
     return depth_map
 
-cap = cv2.VideoCapture("EmulationMSAA.mp4")
+def filter_gray_color(image):
+    # Chuyển đổi ảnh sang không gian màu HSV
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    
+    # Định nghĩa phạm vi màu xám trong không gian HSV
+    # Màu xám có Hue gần như bằng 0 (vì không có màu sắc), và Saturation rất thấp
+    lower_gray = np.array([0, 0, 0])   # Giới hạn dưới: Hue=0, Sat=0, Value=50
+    upper_gray = np.array([180, 30, 200])  # Giới hạn trên: Hue=180, Sat=30, Value=200
+    
+    # Tạo mặt nạ cho các vùng màu xám
+    mask = cv2.inRange(hsv, lower_gray, upper_gray)
+    
+    # Áp dụng mặt nạ lên ảnh gốc
+    gray_filtered = cv2.bitwise_and(image, image, mask=mask)
+    
+    return gray_filtered
+
+cap = cv2.VideoCapture("./video/data.mp4")
 fps = cap.get(cv2.CAP_PROP_FPS)
 wait_time = 1000 / fps
 
 # Tạo bộ tính disparity map
-stereo = cv2.StereoBM_create(numDisparities=64, blockSize=9)
+stereo = cv2.StereoBM_create(numDisparities=64, blockSize=5)
 
 print(f"FPS: {fps}")
+
+# Đường dẫn để lưu hình ảnh
+output_path = "./CNN_Depthmap_check/data/"
+count_img = 0
+last_time_chip = time.time()
+update_interval = 1  # Thời gian cập nhật (giây)
 
 while True:
     start_time = time.time()
@@ -27,44 +52,26 @@ while True:
     if not ret:
         break
 
-    # img = cv2.medianBlur(img, 7)
+    #Tiền xử lí ảnh
+    left, right, _, depth_normalized, depth = pre_processing.preprocessing_vision(img)
 
-    # Chia ảnh thành hai nửa
-    h, w, _ = img.shape
-    # print(img.shape)
     
-    left = img[:, :w // 2, :]
-    right = img[:, w // 2:, :]
+    process_time_chip = time.time() - last_time_chip
+    # Lấy giá trị chipset sau update_interval
+    if process_time_chip >= update_interval:
+        # Lưu hình ảnh
+        print("Đang lưu ảnh")
+        cv2.imwrite(f"{output_path}/vision_depthmap/" + f"{count_img}.png", depth_normalized)
+        cv2.imwrite(f"{output_path}/truth/" + f"{count_img}.png", depth)
+        count_img = count_img + 1
 
-    left = cv2.cvtColor(left, cv2.COLOR_BGR2GRAY)
-    right = cv2.cvtColor(right, cv2.COLOR_BGR2GRAY)
 
-    #Làm mờ 
-    right = cv2.medianBlur(right, 5)
-    left = cv2.medianBlur(left, 5)
-    left = cv2.GaussianBlur(left, (5, 5), 0)
-    right = cv2.GaussianBlur(right, (5, 5), 0)
+    # print(f"Hình ảnh đã được lưu vào: {output_path}")
 
-    threshold2 = 100
-    threshold1 = 10
-    # left = cv2.Canny(left, threshold1=threshold1, threshold2=threshold2)
-    # right = cv2.Canny(right, threshold1=threshold1, threshold2=threshold2)
-    
-
-    # Tính disparity map
-    disparity_map = stereo.compute(left, right).astype(np.float32) / 16.0
-    disparity_map = cv2.normalize(disparity_map, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX).astype(np.uint8)
-    disparity_map = cv2.medianBlur(disparity_map, 5)
-
-    # Tính depth map
-    depth_map = compute_depth_map(disparity_map, fov=90, baseline_cm=6, width_px=left.shape[1])
-
-    # Hiển thị kết quả
-    cv2.imshow("Vision", img)
-    cv2.imshow("Left", left)
-    cv2.imshow("Right", right)
-    cv2.imshow("Disparity_map", disparity_map)
-    cv2.imshow("Depth_map", depth_map / np.max(depth_map) * 255)
+    # Hiển thị ảnh
+    # cv2.imshow('Vision', cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB))
+    cv2.imshow('Vision depth_normalized', cv2.cvtColor(depth_normalized, cv2.COLOR_BGR2RGB))
+    cv2.imshow('Vision depth', cv2.cvtColor(depth, cv2.COLOR_BGR2RGB))
 
     # Điều chỉnh thời gian chờ
     elapsed_time = (time.time() - start_time) * 1000  # Thời gian xử lý
